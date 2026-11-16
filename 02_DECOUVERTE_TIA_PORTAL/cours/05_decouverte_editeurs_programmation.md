@@ -49,3 +49,28 @@ Commande simple d'un moteur :
 ```text
        BP_Marche       Moteur
 |------| |------------- ( )------|
+
+---
+
+## 10. Travaux pratiques : première programmation en SCL
+
+### 10.1 Création du bloc
+
+Dans le projet `Formation_TIA_Portal_V17`, nous avons créé un bloc :
+
+- Nom : `FC_Test_SCL`
+- Type : FC (Function)
+- Langage : SCL
+
+### 10.2 Déclaration d'une variable
+
+Nous avons déclaré une variable locale dans la section `Temp` :
+
+| Nom | Type | Section |
+|---|---|---|
+| Compteur | Int | Temp |
+
+### 10.3 Première affectation
+
+```scl
+#Compteur := 10;
