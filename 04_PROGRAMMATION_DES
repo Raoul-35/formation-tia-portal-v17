@@ -1,0 +1,770 @@
+# MODULE 04 — PROGRAMMATION DES AUTOMATES ET LANGAGES IEC 61131-3
+
+# LEÇON 4 — AUTO-MAINTIEN ET MÉMORISATION DES COMMANDES EN LAD
+
+## 1. Objectifs pédagogiques
+
+À la fin de cette leçon, nous devons être capables de :
+
+- Expliquer le principe de l'auto-maintien dans un programme LAD.
+- Concevoir un circuit Marche/Arrêt avec mémorisation.
+- Comprendre le rôle du contact de maintien.
+- Donner la priorité à l'arrêt dans une commande moteur.
+- Différencier l'auto-maintien classique des instructions SET et RESET.
+- Ajouter une condition de défaut thermique dans une commande.
+- Concevoir une commande de pompe avec voyant de fonctionnement.
+- Analyser le comportement d'un circuit d'auto-maintien selon différents états des entrées et sorties.
+
+---
+
+## 2. Pourquoi utiliser l'auto-maintien ?
+
+Dans une installation industrielle, un opérateur utilise généralement deux boutons pour commander un moteur :
+
+- Un bouton Marche pour démarrer le moteur.
+- Un bouton Arrêt pour arrêter le moteur.
+
+Imaginons que nous programmions directement une bobine avec le bouton Marche :
+
+```text
+ I0.0
+──| |────────────────( )──
+                     Q0.0
+```
+
+Dans cette configuration :
+
+- Lorsque l'opérateur appuie sur Marche, `I0.0 = 1` et le moteur démarre.
+- Lorsque l'opérateur relâche Marche, `I0.0 = 0` et le moteur s'arrête.
+
+Le moteur ne fonctionne donc que pendant l'appui sur le bouton.
+
+Ce fonctionnement n'est généralement pas souhaitable pour une commande industrielle classique.
+
+Nous avons besoin d'un mécanisme qui conserve la commande après le relâchement du bouton Marche.
+
+C'est le rôle de l'**auto-maintien**.
+
+### 2.1. Définition
+
+L'auto-maintien est une technique de programmation qui permet de conserver l'état actif d'une commande après la disparition de la condition initiale de démarrage.
+
+Autrement dit, une fois démarré, le moteur continue de fonctionner sans que l'opérateur soit obligé de maintenir le bouton Marche enfoncé.
+
+Le fonctionnement est interrompu lorsqu'une condition d'arrêt intervient.
+
+---
+
+## 3. Principe de fonctionnement de l'auto-maintien
+
+Considérons les variables suivantes :
+
+| Adresse | Nom de variable | Fonction |
+|---|---|---|
+| I0.0 | BP_Marche | Bouton de démarrage |
+| I0.1 | BP_Arret | Bouton d'arrêt |
+| Q0.0 | KM_Moteur | Commande du contacteur moteur |
+
+Le principe consiste à utiliser un contact associé à la sortie `Q0.0`, placé en parallèle avec le bouton Marche.
+
+### 3.1. Schéma LAD
+
+```text
+             +-------| |-------+
+             |       Q0.0      |
+ I0.1        |                 |
+──|/|────────+-------| |-------+────( )──
+                     I0.0            Q0.0
+```
+
+Lecture du schéma :
+
+- Le contact NF associé à `I0.1` représente la condition d'arrêt.
+- Le contact NO associé à `I0.0` représente la demande de démarrage.
+- Le contact NO associé à `Q0.0` assure le maintien.
+- La bobine `Q0.0` commande le contacteur moteur.
+
+Le contact `Q0.0` est un contact logique associé à la variable de sortie. Il ne représente pas nécessairement un contact auxiliaire physique du contacteur.
+
+### 3.2. Pourquoi placer le contact de maintien en parallèle avec Marche ?
+
+Le montage comporte deux chemins possibles :
+
+1. Un chemin passant par le bouton Marche.
+2. Un chemin passant par le contact de maintien.
+
+Au démarrage, le premier chemin permet d'activer la bobine.
+
+Après le relâchement du bouton Marche, le deuxième chemin conserve la continuité logique.
+
+Le contact de maintien reste actif tant que `Q0.0 = 1`.
+
+### 3.3. Les trois phases du fonctionnement
+
+**Phase 1 : moteur arrêté**
+
+- `I0.0 = 0`
+- `I0.1 = 0`
+- `Q0.0 = 0`
+
+Le bouton Marche est relâché et le contact de maintien est ouvert.
+
+La bobine reste désactivée.
+
+**Phase 2 : démarrage**
+
+L'opérateur appuie sur Marche :
+
+- `I0.0 = 1`
+- `I0.1 = 0`
+
+Le chemin logique devient passant.
+
+La bobine s'active :
+
+`Q0.0 = 1`
+
+Le moteur reçoit l'ordre de démarrage.
+
+**Phase 3 : maintien**
+
+L'opérateur relâche le bouton Marche :
+
+- `I0.0 = 0`
+- `I0.1 = 0`
+- `Q0.0 = 1`
+
+Le contact de maintien associé à `Q0.0` reste passant.
+
+La commande moteur est conservée.
+
+---
+
+## 4. Expression logique de l'auto-maintien
+
+À partir du schéma LAD, nous pouvons écrire :
+
+`Q0.0 = NON I0.1 ET (I0.0 OU Q0.0)`
+
+Cette expression contient trois éléments :
+
+| Élément | Signification |
+|---|---|
+| `NON I0.1` | Absence de demande d'arrêt |
+| `I0.0` | Demande de démarrage |
+| `Q0.0` | État mémorisé par le contact de maintien |
+
+Les opérations logiques utilisées sont :
+
+- NON : inversion logique.
+- ET : toutes les conditions doivent être vraies.
+- OU : au moins une des deux conditions doit être vraie.
+
+Les parenthèses indiquent que Marche et le maintien sont regroupés dans une opération OU.
+
+### 4.1. Vérification par calcul
+
+Lorsque :
+
+- `I0.0 = 0`
+- `I0.1 = 0`
+- `Q0.0 = 1`
+
+Nous obtenons :
+
+`Q0.0 = NON 0 ET (0 OU 1)`
+
+`Q0.0 = 1 ET 1`
+
+`Q0.0 = 1`
+
+La commande reste donc active.
+
+Lorsque le bouton Arrêt est actionné :
+
+- `I0.1 = 1`
+
+Nous obtenons :
+
+`Q0.0 = NON 1 ET (I0.0 OU Q0.0)`
+
+`Q0.0 = 0 ET (I0.0 OU Q0.0)`
+
+`Q0.0 = 0`
+
+La commande est désactivée.
+
+---
+
+## 5. Comprendre la priorité à l'arrêt
+
+Dans une commande industrielle, l'arrêt doit être prioritaire sur le démarrage.
+
+Cela signifie que si les commandes Marche et Arrêt sont sollicitées simultanément, la commande logique doit conduire à l'arrêt.
+
+Dans notre circuit :
+
+`Q0.0 = NON I0.1 ET (I0.0 OU Q0.0)`
+
+Le contact associé à l'arrêt est placé en série avant les deux branches parallèles.
+
+Lorsque `I0.1 = 1`, le contact NF LAD devient non passant.
+
+Même si Marche est sollicité, le chemin logique reste interrompu.
+
+### 5.1. Exemple
+
+| Marche I0.0 | Arrêt I0.1 | État précédent Q0.0 | Nouvel état Q0.0 |
+|---:|---:|---:|---:|
+| 0 | 0 | 0 | 0 |
+| 1 | 0 | 0 | 1 |
+| 0 | 0 | 1 | 1 |
+| 1 | 0 | 1 | 1 |
+| 0 | 1 | 1 | 0 |
+| 1 | 1 | 0 | 0 |
+| 1 | 1 | 1 | 0 |
+
+La priorité à l'arrêt est ainsi vérifiée.
+
+### 5.2. Attention à la différence entre contact physique et contact LAD
+
+Dans une installation classique, le bouton Arrêt peut être un bouton physique à contact normalement fermé (NF).
+
+Au repos :
+
+- Le contact physique est fermé.
+- L'entrée de l'API reçoit généralement un niveau logique 1.
+
+Lorsqu'on appuie sur Arrêt :
+
+- Le contact physique s'ouvre.
+- L'entrée de l'API passe généralement à 0.
+
+Dans notre exemple pédagogique, nous avons utilisé une convention logique où `I0.1 = 1` signifie « demande d'arrêt ».
+
+Il faut donc distinguer :
+
+- L'état électrique du contact physique.
+- La valeur logique de la variable dans le programme.
+- Le type de contact NO ou NF utilisé dans le réseau LAD.
+
+Le choix du câblage et la convention de programmation doivent être cohérents.
+
+---
+
+## 6. Différence entre auto-maintien et SET/RESET
+
+L'auto-maintien et les instructions SET/RESET permettent tous les deux de conserver un état logique.
+
+Cependant, leur méthode de fonctionnement est différente.
+
+### 6.1. Auto-maintien classique
+
+L'auto-maintien utilise un contact logique en parallèle avec le bouton Marche.
+
+Exemple :
+
+```text
+             +-------| |-------+
+             |       Q0.0      |
+──|/|────────+-------| |-------+────( )──
+  I0.1               I0.0            Q0.0
+```
+
+La mémorisation est réalisée par le contact de maintien.
+
+### 6.2. Instructions SET et RESET
+
+Les instructions SET et RESET permettent de mémoriser ou de réinitialiser une variable.
+
+- SET : active et mémorise la variable.
+- RESET : désactive et réinitialise la variable.
+
+Représentation simplifiée :
+
+```text
+Condition Marche ─────────(S)── M0.0
+
+Condition Arrêt ──────────(R)── M0.0
+```
+
+`M0.0` représente ici une variable mémoire.
+
+Lorsque SET est exécuté, `M0.0` passe à 1 et conserve cet état jusqu'à l'exécution de RESET.
+
+### 6.3. Tableau comparatif
+
+| Critère | Auto-maintien | SET/RESET |
+|---|---|---|
+| Principe | Contact de maintien | Instructions dédiées |
+| Mémorisation | Par retour logique | Par mémorisation de variable |
+| Lecture LAD | Circuit de contacts | Bobines SET et RESET |
+| Utilisation | Commandes classiques | Mémorisations explicites |
+| Réinitialisation | Interruption du chemin logique | Exécution de RESET |
+
+**Attention :** lorsque SET et RESET peuvent être exécutés dans un même cycle, il faut définir explicitement la priorité souhaitée et vérifier l'ordre d'exécution du programme.
+
+---
+
+## 7. Intégration d'un défaut thermique
+
+Dans une installation industrielle, un moteur peut subir une surcharge entraînant une augmentation anormale de sa température.
+
+Un relais thermique ou un dispositif de protection adapté peut détecter cette situation et provoquer l'arrêt du moteur.
+
+Nous allons ajouter une condition de défaut thermique à notre commande.
+
+### 7.1. Tableau des variables
+
+| Adresse | Variable | Fonction |
+|---|---|---|
+| I0.0 | BP_Marche | Bouton Marche |
+| I0.1 | BP_Arret | Bouton Arrêt |
+| I0.2 | Defaut_Thermique | Signal de défaut thermique |
+| Q0.0 | KM_Moteur | Commande du contacteur moteur |
+
+### 7.2. Nouvelle expression logique
+
+`Q0.0 = NON I0.1 ET NON I0.2 ET (I0.0 OU Q0.0)`
+
+Deux conditions doivent maintenant être respectées :
+
+1. Aucun ordre d'arrêt ne doit être présent.
+2. Aucun défaut thermique ne doit être présent.
+
+### 7.3. Fonctionnement
+
+En fonctionnement normal :
+
+- `I0.1 = 0`
+- `I0.2 = 0`
+
+Le circuit peut autoriser le démarrage et le maintien.
+
+Lorsqu'un défaut thermique apparaît :
+
+- `I0.2 = 1`
+- Le contact NF LAD associé à cette variable devient non passant.
+- La commande `Q0.0` est désactivée.
+
+La pompe ou le moteur reçoit donc un ordre d'arrêt.
+
+### 7.4. Exemple de calcul
+
+Données :
+
+- `I0.0 = 0`
+- `I0.1 = 0`
+- `I0.2 = 1`
+- `Q0.0 = 1` avant le défaut.
+
+Calcul :
+
+`Q0.0 = NON 0 ET NON 1 ET (0 OU 1)`
+
+`Q0.0 = 1 ET 0 ET 1`
+
+`Q0.0 = 0`
+
+Le défaut thermique interrompt le chemin logique.
+
+**Remarque de sécurité :** un programme LAD standard ne doit pas constituer à lui seul une fonction de sécurité. Les arrêts d'urgence et les protections des personnes nécessitent une architecture de sécurité appropriée, avec les dispositifs et équipements adaptés. La protection thermique doit également agir conformément à l'architecture électrique retenue, et pas uniquement par une condition logicielle.
+
+---
+
+## 8. Application industrielle : commande d'une pompe
+
+Nous allons maintenant réunir les notions étudiées dans une application.
+
+### 8.1. Cahier des charges
+
+Nous voulons commander une pompe industrielle avec :
+
+- Un bouton Marche.
+- Un bouton Arrêt.
+- Un relais thermique.
+- Un contacteur moteur.
+- Un voyant vert indiquant l'ordre de fonctionnement.
+
+Conditions :
+
+1. L'opérateur appuie sur Marche pour démarrer la pompe.
+2. La pompe reste en marche après le relâchement de Marche.
+3. L'opérateur peut arrêter la pompe avec Arrêt.
+4. Un défaut thermique provoque l'arrêt de la commande.
+5. Le voyant vert s'allume lorsque la commande de la pompe est active.
+
+### 8.2. Affectation des variables
+
+| Adresse | Nom | Type | Fonction |
+|---|---|---|---|
+| I0.0 | BP_Marche | Bool | Bouton Marche |
+| I0.1 | BP_Arret | Bool | Bouton Arrêt |
+| I0.2 | Defaut_Thermique | Bool | Signal de défaut |
+| Q0.0 | KM_Pompe | Bool | Commande du contacteur |
+| Q0.1 | Voyant_Marche | Bool | Voyant vert |
+
+### 8.3. Réseau 1 : commande de la pompe
+
+Expression :
+
+`Q0.0 = NON I0.1 ET NON I0.2 ET (I0.0 OU Q0.0)`
+
+Le réseau LAD doit comporter :
+
+- Un contact NF associé à la demande d'arrêt.
+- Un contact NF associé au défaut thermique.
+- Deux branches parallèles :
+  - Contact NO Marche.
+  - Contact NO de maintien associé à Q0.0.
+- Une bobine Q0.0.
+
+### 8.4. Réseau 2 : commande du voyant
+
+Expression :
+
+`Q0.1 = Q0.0`
+
+Lorsque la commande de la pompe est active, le voyant vert s'allume.
+
+Lorsque la commande est désactivée, le voyant s'éteint.
+
+**Limite de cette indication :** le voyant confirme l'activation de la commande électrique de la pompe, mais ne garantit pas à lui seul que le moteur tourne réellement. Pour confirmer le fonctionnement physique, un retour d'état approprié peut être nécessaire.
+
+---
+
+## 9. Analyse des états de fonctionnement
+
+| Situation | I0.0 | I0.1 | I0.2 | Q0.0 | Q0.1 |
+|---|---:|---:|---:|---:|---:|
+| Pompe arrêtée | 0 | 0 | 0 | 0 | 0 |
+| Appui sur Marche | 1 | 0 | 0 | 1 | 1 |
+| Marche relâché, maintien actif | 0 | 0 | 0 | 1 | 1 |
+| Appui sur Arrêt | 0 | 1 | 0 | 0 | 0 |
+| Défaut thermique | 0 | 0 | 1 | 0 | 0 |
+| Marche et Arrêt simultanés | 1 | 1 | 0 | 0 | 0 |
+
+Cette table permet de vérifier les principaux scénarios de fonctionnement.
+
+---
+
+## 10. Erreurs fréquentes à éviter
+
+### Erreur 1 : placer le contact de maintien en série avec Marche
+
+Dans ce cas, le contact de maintien ne crée pas un deuxième chemin logique.
+
+Il doit être placé en parallèle avec le bouton Marche.
+
+### Erreur 2 : oublier la condition Arrêt
+
+Sans condition d'arrêt correctement intégrée, la commande peut rester active.
+
+### Erreur 3 : oublier le défaut thermique
+
+Une commande moteur doit prendre en compte les conditions de protection prévues dans l'architecture.
+
+### Erreur 4 : confondre contact physique et contact LAD
+
+Un contact physique NF et un contact NF dans le programme ne décrivent pas nécessairement le même état électrique.
+
+Il faut toujours vérifier la convention utilisée pour la variable d'entrée.
+
+### Erreur 5 : confondre commande et fonctionnement réel
+
+Une sortie Q active indique un ordre électrique. Elle ne confirme pas nécessairement que le moteur tourne.
+
+### Erreur 6 : utiliser SET et RESET sans définir les priorités
+
+Lorsque plusieurs réseaux peuvent modifier une même variable mémorisée, il faut analyser l'ordre d'exécution et les cas de commandes simultanées.
+
+---
+
+## 11. Synthèse de la leçon
+
+Les notions essentielles sont :
+
+1. L'auto-maintien permet de conserver une commande après le relâchement du bouton Marche.
+2. Le contact de maintien est placé en parallèle avec le bouton Marche.
+3. Le bouton Arrêt doit interrompre le chemin logique.
+4. La priorité à l'arrêt doit être explicitement prévue.
+5. Les instructions SET et RESET constituent une autre méthode de mémorisation.
+6. Un défaut thermique peut être intégré comme condition d'autorisation.
+7. Un voyant peut suivre l'état de la commande moteur.
+8. Une sortie API active ne garantit pas à elle seule le fonctionnement physique de l'équipement.
+9. Les fonctions de sécurité nécessitent une architecture adaptée et ne doivent pas reposer uniquement sur un programme LAD standard.
+
+---
+
+# 12. QCM DE VALIDATION
+
+## Question 1
+
+Quel est le rôle principal de l'auto-maintien ?
+
+**Réponse : B.** Conserver une commande active après le relâchement du bouton Marche.
+
+Explication : le contact de maintien crée un chemin logique qui conserve l'activation de la bobine.
+
+## Question 2
+
+Où place-t-on le contact de maintien ?
+
+**Réponse : B.** En parallèle avec le bouton Marche.
+
+Explication : il crée un deuxième chemin logique permettant de conserver la commande.
+
+## Question 3
+
+Quel est le rôle du contact NF associé au bouton Arrêt ?
+
+**Réponse : C.** Interrompre le chemin logique lorsque l'arrêt est demandé.
+
+Explication : lorsque la demande d'arrêt devient active, le contact NF LAD devient non passant.
+
+## Question 4
+
+Le moteur fonctionne déjà. Marche et Arrêt sont relâchés. Quel est l'état de Q0.0 ?
+
+**Réponse : B.** `Q0.0 = 1`.
+
+Explication : le contact de maintien conserve la commande.
+
+## Question 5
+
+Que se passe-t-il lorsque Marche et Arrêt sont actionnés simultanément ?
+
+**Réponse : C.** Le moteur s'arrête, car la condition Arrêt interrompt le circuit.
+
+Explication : l'arrêt est prioritaire dans l'expression logique étudiée.
+
+## Question 6
+
+Quelle différence existe entre l'auto-maintien et SET/RESET ?
+
+**Réponse : B.** L'auto-maintien utilise un contact logique en parallèle avec Marche, tandis que SET/RESET utilisent des instructions dédiées à la mémorisation.
+
+Explication : les deux méthodes conservent un état logique, mais utilisent des mécanismes différents.
+
+## Question 7
+
+Quel est le rôle du contact NF associé au défaut thermique ?
+
+**Réponse : B.** Empêcher le démarrage ou provoquer l'arrêt de la pompe lorsqu'un défaut thermique est détecté.
+
+Explication : le défaut thermique interrompt le chemin logique de commande.
+
+**Résultat obtenu : 7/7.**
+
+---
+
+# 13. EXERCICES D'APPLICATION CORRIGÉS
+
+## Exercice 1 — Fonctionnement de l'auto-maintien
+
+### Énoncé
+
+Données :
+
+- `I0.0 = 0`
+- `I0.1 = 0`
+- `Q0.0 = 0` initialement.
+
+L'opérateur appuie sur Marche puis relâche le bouton.
+
+Quel sera l'état final de Q0.0 ?
+
+### Réponse correcte : B
+
+`Q0.0 = 1` : le moteur reste en marche grâce à l'auto-maintien.
+
+### Correction
+
+Au départ, la bobine est désactivée.
+
+Lorsque Marche est actionné, `I0.0 = 1`. La bobine devient active.
+
+Après le relâchement de Marche, le contact associé à Q0.0 conserve le chemin logique.
+
+L'état final est donc `Q0.0 = 1`.
+
+**Résultat de l'utilisateur : réponse D, incorrecte.**
+
+La réponse D correspond à un circuit sans auto-maintien, dans lequel la commande dépend uniquement de l'appui sur Marche.
+
+## Exercice 2 — Priorité à l'arrêt
+
+### Énoncé
+
+Le moteur fonctionne déjà.
+
+- `I0.0 = 0`
+- `I0.1 = 1`
+- `Q0.0 = 1` avant l'arrêt.
+
+Quelle sera la valeur finale de Q0.0 ?
+
+### Réponse correcte : B
+
+`Q0.0 = 0`.
+
+### Correction
+
+`Q0.0 = NON 1 ET (0 OU 1)`
+
+`Q0.0 = 0 ET 1`
+
+`Q0.0 = 0`
+
+Le contact associé à l'arrêt interrompt le circuit.
+
+**Résultat de l'utilisateur : réponse B, correcte.**
+
+## Exercice 3 — Défaut thermique
+
+### Énoncé
+
+Le moteur fonctionne et un défaut thermique apparaît.
+
+- `I0.0 = 0`
+- `I0.1 = 0`
+- `I0.2 = 1`
+- `Q0.0 = 1` avant le défaut.
+
+Quelle sera la valeur finale de Q0.0 ?
+
+### Réponse correcte : B
+
+`Q0.0 = 0`.
+
+### Correction
+
+`Q0.0 = NON 0 ET NON 1 ET (0 OU 1)`
+
+`Q0.0 = 1 ET 0 ET 1`
+
+`Q0.0 = 0`
+
+Le défaut thermique désactive la commande.
+
+**Résultat de l'utilisateur : réponse B, correcte.**
+
+## Exercice 4 — Construction d'une expression logique
+
+### Énoncé
+
+Une pompe doit :
+
+- Démarrer sur appui Marche.
+- Rester en marche après relâchement.
+- S'arrêter sur appui Arrêt.
+- S'arrêter lorsqu'un défaut thermique apparaît.
+
+Quelle expression correspond à ce fonctionnement ?
+
+### Réponse correcte : A
+
+`Q0.0 = NON I0.1 ET NON I0.2 ET (I0.0 OU Q0.0)`
+
+### Correction
+
+- `NON I0.1` : aucune demande d'arrêt.
+- `NON I0.2` : aucun défaut thermique.
+- `I0.0` : demande de démarrage.
+- `Q0.0` : maintien de la commande.
+
+**Résultat de l'utilisateur : réponse A, correcte.**
+
+## Exercice 5 — Commande d'un voyant
+
+### Énoncé
+
+Un voyant vert doit s'allumer lorsque la commande de la pompe est active.
+
+Quelle expression faut-il utiliser ?
+
+### Réponse correcte : B
+
+`Q0.1 = Q0.0`
+
+### Correction
+
+Le voyant suit l'état de la commande de la pompe.
+
+- Si `Q0.0 = 0`, le voyant est éteint.
+- Si `Q0.0 = 1`, le voyant est allumé.
+
+**Résultat de l'utilisateur : réponse B, correcte.**
+
+## Exercice 6 — Analyse d'une situation industrielle
+
+### Énoncé
+
+Une pompe fonctionne déjà.
+
+- `I0.0 = 0`
+- `I0.1 = 0`
+- `I0.2 = 0`
+- `Q0.0 = 1`
+
+L'opérateur appuie une nouvelle fois sur Marche puis relâche le bouton.
+
+Quel sera l'état final de la pompe ?
+
+### Réponse correcte : B
+
+La pompe reste en marche.
+
+### Correction
+
+`Q0.0 = 1 ET 1 ET (0 OU 1)`
+
+`Q0.0 = 1`
+
+Le contact de maintien reste actif.
+
+**Résultat de l'utilisateur : réponse B, correcte.**
+
+### Bilan des exercices
+
+| Exercice | Résultat |
+|---|---|
+| 1. Fonctionnement de l'auto-maintien | Incorrect |
+| 2. Priorité à l'arrêt | Correct |
+| 3. Défaut thermique | Correct |
+| 4. Expression logique | Correct |
+| 5. Commande du voyant | Correct |
+| 6. Analyse industrielle | Correct |
+
+**Score final : 5/6.**
+
+---
+
+# 14. COMPTE RENDU DES MANIPULATIONS PRATIQUES
+
+L'utilisateur a confirmé que toutes les manipulations pratiques prévues pour cette leçon ont déjà été réalisées dans TIA Portal V17.
+
+Les opérations suivantes sont donc considérées comme effectuées :
+
+| N° | Manipulation | État |
+|---|---|---|
+| 1 | Création d'un circuit LAD d'auto-maintien | Réalisée |
+| 2 | Insertion du contact de maintien en parallèle avec Marche | Réalisée |
+| 3 | Intégration d'un bouton Arrêt avec priorité | Réalisée |
+| 4 | Ajout d'une condition de défaut thermique | Réalisée |
+| 5 | Compilation du programme | Réalisée |
+| 6 | Vérification du programme LAD | Réalisée |
+
+Aucune nouvelle manipulation n'est imposée pour cette leçon afin d'éviter de répéter des opérations déjà effectuées.
+
+---
+
+# 15. CONCLUSION
+
+L'auto-maintien constitue une fonction fondamentale de la programmation des automates industriels.
+
+Il permet de réaliser des commandes Marche/Arrêt adaptées aux besoins des installations industrielles.
+
+Cette leçon a permis d'étudier son principe, sa traduction en langage LAD, sa différence avec les instructions SET/RESET et son intégration dans une commande de pompe avec protection thermique et voyant.
+
+Les connaissances acquises serviront de base pour aborder les fonctions de programmation LAD plus avancées et la réalisation de séquences de commande industrielles.
