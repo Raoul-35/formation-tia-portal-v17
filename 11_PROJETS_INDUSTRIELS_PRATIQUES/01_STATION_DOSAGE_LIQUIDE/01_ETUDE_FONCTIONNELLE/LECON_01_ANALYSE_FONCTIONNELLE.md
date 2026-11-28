@@ -414,3 +414,248 @@ Elle constitue la référence pour les étapes suivantes :
 - Réalisation de la supervision WinCC.
 
 Aucune programmation ne devra commencer avant que les fonctions, les conditions de transition et les réactions aux défauts soient suffisamment définies.
+
+
+# 14. Complément 1 — Finalisation des conditions fonctionnelles
+
+## 14.1. Conditions initiales
+
+Avant d'autoriser un cycle automatique, l'automate doit vérifier :
+
+| N° | Condition | État attendu |
+|---|---|---|
+| 1 | Arrêt d'urgence | Relâché et circuit de sécurité réarmé |
+| 2 | Pompe P-101 | Disponible, sans défaut |
+| 3 | Pompe P-102 | Disponible, sans défaut |
+| 4 | Agitateur AG-101 | Disponible, sans défaut |
+| 5 | Réservoir TK-101 | Niveau suffisant |
+| 6 | Réservoir TK-102 | Niveau suffisant |
+| 7 | Cuve TK-103 | Niveau compatible avec la recette |
+| 8 | Vanne XV-103 | Fermée |
+| 9 | Débitmètres FT-101 et FT-102 | Mesures valides |
+| 10 | Transmetteur LT-103 | Mesure valide |
+| 11 | Recette | Sélectionnée et validée |
+| 12 | Mode de fonctionnement | Automatique |
+
+Si une condition n'est pas satisfaite, le démarrage est interdit et une indication explicative est affichée sur WinCC.
+
+## 14.2. Autorisation de démarrage
+
+Le démarrage nécessite :
+- Une demande de l'opérateur.
+- La validation des conditions initiales.
+- L'absence de défaut bloquant.
+
+La sélection du mode automatique ne provoque jamais, à elle seule, le démarrage du procédé.
+
+## 14.3. Conditions de transition
+
+| Étape | Opération | Condition de transition |
+|---|---|---|
+| 0 | Attente | Demande de démarrage valide |
+| 10 | Dosage A | Volume A atteint |
+| 20 | Confirmation arrêt P-101 | Pompe A arrêtée |
+| 30 | Dosage B | Volume B atteint |
+| 40 | Confirmation arrêt P-102 | Pompe B arrêtée |
+| 50 | Démarrage agitateur | Retour de fonctionnement reçu |
+| 60 | Mélange | Temps de mélange écoulé |
+| 70 | Arrêt agitateur | Agitateur arrêté |
+| 80 | Vidange | Niveau bas de vidange atteint |
+| 90 | Fermeture vanne | Vanne fermée |
+| 100 | Fin de cycle | Fin de production confirmée |
+
+Ces numéros représentent les étapes fonctionnelles prévues pour la future programmation.
+
+## 14.4. Gestion des situations anormales
+
+Trois catégories sont distinguées.
+
+**Défaut d'équipement :**
+- Arrêter l'équipement concerné.
+- Interrompre le cycle si nécessaire.
+- Mémoriser l'étape atteinte.
+- Signaler le défaut.
+- Exiger une vérification et un réarmement autorisé.
+
+**Défaut de mesure :**
+- Invalider la mesure concernée.
+- Arrêter l'opération qui dépend de cette mesure.
+- Signaler le défaut.
+- Interdire la reprise tant que la mesure n'est pas redevenue valide.
+
+**Arrêt d'urgence :**
+- Déclencher la fonction de sécurité.
+- Arrêter les équipements concernés.
+- Inhiber les commandes de marche.
+- Exiger une procédure de réarmement volontaire.
+
+La fonction d'arrêt d'urgence réelle devra être assurée par une architecture de sécurité appropriée. La simulation logicielle ne remplace pas cette architecture.
+
+## 14.5. Gestion des interruptions et des reprises
+
+Le système doit conserver :
+- L'étape interrompue.
+- Le volume A déjà transféré.
+- Le volume B déjà transféré.
+- La recette utilisée.
+- La cause de l'interruption.
+
+Exemple :
+
+| Paramètre | Valeur |
+|---|---:|
+| Consigne A | 100 L |
+| Volume transféré avant défaut | 65 L |
+| Volume restant | 35 L |
+
+Après suppression du défaut et réarmement, une nouvelle autorisation de l'opérateur sera nécessaire.
+
+La reprise doit tenir compte du volume déjà transféré afin d'éviter un surdosage.
+
+Les interruptions pendant le mélange ou la vidange feront l'objet de stratégies spécifiques.
+
+## 14.6. Conditions de fin de cycle
+
+Un cycle est déclaré terminé lorsque :
+- Les deux dosages sont terminés.
+- Le mélange est terminé.
+- L'agitateur est arrêté.
+- La vidange est terminée.
+- La vanne est fermée.
+- Aucun défaut bloquant n'est présent.
+
+Le compteur de production est alors incrémenté.
+
+# 15. Complément 2 — Gestion des mesures et des quantités
+
+## 15.1. Mesure des débits
+
+Deux débitmètres sont utilisés :
+
+- FT-101 : mesure du débit du liquide A.
+- FT-102 : mesure du débit du liquide B.
+
+Pour connaître le volume transféré, l'automate intègre le débit instantané dans le temps.
+
+La relation utilisée est :
+
+V = intégrale de Q(t) par rapport au temps.
+
+Avec :
+- V : volume transféré en litres.
+- Q : débit instantané en litres par seconde.
+- t : temps en secondes.
+
+Pour la simulation, nous retenons une représentation analogique 4–20 mA.
+
+| Signal | Débit |
+|---|---:|
+| 4 mA | 0 L/min |
+| 8 mA | 25 L/min |
+| 12 mA | 50 L/min |
+| 16 mA | 75 L/min |
+| 20 mA | 100 L/min |
+
+Exemple : un débit constant de 50 L/min pendant 2 minutes correspond à un volume transféré de 100 litres.
+
+Le dosage est terminé lorsque le volume calculé atteint la consigne de la recette.
+
+## 15.2. Mesure du niveau de la cuve
+
+Le transmetteur LT-103 mesure le niveau de TK-103.
+
+| Signal | Niveau |
+|---|---:|
+| 4 mA | 0 % |
+| 8 mA | 25 % |
+| 12 mA | 50 % |
+| 16 mA | 75 % |
+| 20 mA | 100 % |
+
+Les seuils pédagogiques retenus sont :
+
+| Seuil | Valeur | Fonction |
+|---|---:|---|
+| Niveau bas | 10 % | Détection de niveau faible |
+| Niveau bas de vidange | 5 % | Fin de vidange |
+| Niveau haut | 85 % | Arrêt préventif du remplissage |
+| Niveau très haut | 95 % | Protection contre le débordement |
+
+Ces seuils devront être adaptés aux caractéristiques réelles d'une installation.
+
+## 15.3. Calcul du volume dans la cuve
+
+La capacité pédagogique de TK-103 est fixée à 200 litres.
+
+Pour une cuve de section constante :
+
+Volume = (Niveau en % / 100) × Capacité.
+
+Exemple à 50 % :
+
+Volume = 0,50 × 200 = 100 L.
+
+À 85 % :
+
+Volume = 0,85 × 200 = 170 L.
+
+Cette conversion suppose une relation linéaire entre le niveau et le volume. Pour une cuve de géométrie particulière, une table de conversion ou une fonction adaptée sera nécessaire.
+
+## 15.4. Vérification des recettes
+
+Avant le démarrage, l'automate vérifie :
+- Les volumes A et B sont strictement positifs.
+- Le volume total respecte la capacité autorisée.
+- Le niveau initial permet le dosage.
+- Les réservoirs sources disposent de suffisamment de liquide.
+- La durée de mélange est dans les limites autorisées.
+
+Exemple :
+
+| Paramètre | Valeur |
+|---|---:|
+| Capacité de TK-103 | 200 L |
+| Volume initial | 0 L |
+| Volume A demandé | 100 L |
+| Volume B demandé | 50 L |
+| Volume final théorique | 150 L |
+| Marge disponible | 50 L |
+
+Cette recette est acceptable du point de vue de la capacité.
+
+Une recette de 100 L + 120 L serait refusée.
+
+## 15.5. Défauts de mesure
+
+| Défaut | Détection | Réaction |
+|---|---|---|
+| Signal inférieur à 4 mA | Sous-plage analogique | Invalidation de la mesure |
+| Signal supérieur à 20 mA | Dépassement de plage | Invalidation de la mesure |
+| Débit nul pendant un transfert | Absence de débit temporisée | Arrêt de la pompe |
+| Niveau incohérent | Valeur hors plage | Blocage des opérations dépendantes |
+| Débit excessif | Dépassement de limite configurée | Arrêt du transfert |
+
+Les seuils et temporisations seront définis pendant la conception détaillée.
+
+## 15.6. Paramètres de simulation retenus
+
+| Paramètre | Valeur |
+|---|---:|
+| Capacité TK-103 | 200 L |
+| Débit maximal FT-101 | 100 L/min |
+| Débit maximal FT-102 | 100 L/min |
+| Niveau bas | 10 % |
+| Niveau bas de vidange | 5 % |
+| Niveau haut | 85 % |
+| Niveau très haut | 95 % |
+| Volume A, recette 01 | 100 L |
+| Volume B, recette 01 | 50 L |
+| Temps de mélange | 120 s |
+
+Ces valeurs sont des hypothèses pédagogiques pour la simulation, et non des caractéristiques constructeur.
+
+# 16. Conclusion complémentaire de l'analyse fonctionnelle
+
+Les compléments apportés précisent les conditions initiales, les autorisations de démarrage, les transitions, les réactions aux défauts, les reprises, la fin de cycle ainsi que la gestion des mesures et des quantités.
+
+L'analyse fonctionnelle constitue désormais la base de référence pour établir le cahier des charges fonctionnel et préparer le GRAFCET.
